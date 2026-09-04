@@ -1,0 +1,1 @@
+x: float32[4096, 512]，weight: float32[512]，bias: float32[512]

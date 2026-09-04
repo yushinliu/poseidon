@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Poseidon · 沐曦 mcTriton Kernel 生成平台</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="logo">⚡ Poseidon</div>
+  <div class="subtitle">沐曦（MetaX）GPU · mcTriton Kernel 自动生成与性能测试平台</div>
+  <div id="health" class="health">连接中…</div>
+</header>
+
+<main>
+  <section class="left">
+    <div class="card">
+      <h2>运行配置</h2>
+      <div class="grid2">
+        <label>GPU 设备
+          <select id="sel-gpu"></select>
+        </label>
+        <label>MACA SDK
+          <select id="sel-sdk"></select>
+        </label>
+        <label>whl 包
+          <select id="sel-whl"></select>
+        </label>
+        <label>生成模型
+          <select id="sel-model"></select>
+        </label>
+        <label>rtol
+          <input id="inp-rtol" type="number" step="any" value="0.02">
+        </label>
+        <label>atol
+          <input id="inp-atol" type="number" step="any" value="0.02">
+        </label>
+        <label>最大修复轮次
+          <input id="inp-retries" type="number" min="0" max="10" value="3">
+        </label>
+        <label>性能测试轮数
+          <input id="inp-iters" type="number" min="1" max="500" value="50">
+        </label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>torch 参考实现 <span class="hint">需定义 <code>def torch_fn(*args, **kwargs)</code></span></h2>
+      <div class="toolbar">
+        <label>示例</label>
+        <select id="sel-example">
+          <option value="">选择示例…</option>
+          <option value="vector_add">向量加法 (vector_add)</option>
+          <option value="softmax">Softmax (dim=-1)</option>
+          <option value="matmul">矩阵乘 (matmul)</option>
+          <option value="gelu">GELU 激活</option>
+          <option value="layernorm">LayerNorm</option>
+        </select>
+      </div>
+      <textarea id="torch-code" spellcheck="false" placeholder="def torch_fn(x, y):&#10;    return x + y"></textarea>
+      <details class="inputs-hint-box">
+        <summary>输入说明（可选，留空由模型设计）</summary>
+        <textarea id="inputs-hint" placeholder="例如：x: float32[1024, 4096]，y: float32[1024, 4096]"></textarea>
+      </details>
+      <button id="btn-run" class="run">▶ 生成并测试（Run）</button>
+    </div>
+  </section>
+
+  <section class="right">
+    <div class="card" id="job-card" hidden>
+      <div class="job-head">
+        <h2 id="job-title">任务</h2>
+        <span id="job-status" class="badge">—</span>
+      </div>
+      <div id="job-log" class="log"></div>
+      <div id="job-result"></div>
+    </div>
+
+    <div class="card">
+      <h2>任务历史</h2>
+      <div id="job-history" class="history"></div>
+    </div>
+  </section>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

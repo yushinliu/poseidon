@@ -1,0 +1,97 @@
+import { config } from '../config.js';
+import { shq } from './ssh-client.js';
+
+/** 展开构建机上的 ~ 路径（远程 home 由 username 决定，这里约定为 /home/<user>）。 */
+export function expandRemote(user, p) {
+  if (typeof p !== 'string') return p;
+  if (p === '~') return `/home/${user}`;
+  if (p.startsWith('~/')) return `/home/${user}/${p.slice(2)}`;
+  return p;
+}
+
+/**
+ * 确定某个 whl 版本使用的 Python 解释器。
+ * - 若配置了 python_overrides[whl]：直接用该解释器（如已有的 conda 环境）。
+ * - 否则在 venvs_dir/<whl> 创建 venv 并安装该版本的 torch/triton wheel。
+ * 返回 { python, kind: 'override'|'venv' }。
+ */
+export async function ensurePython(ssh, whl, emit) {
+  const cfg = config.build_machine;
+  const user = cfg.username;
+  const override = cfg.python_overrides?.[whl];
+  if (override) {
+    const p = expandRemote(user, override);
+    emit('info', `使用解释器: ${override}`);
+    const r = await ssh.exec(`${shq(p)} --version`);
+    if (r.code !== 0) throw new Error(`解释器不可用: ${override}\n${r.stderr}`);
+    return { python: p, kind: 'override' };
+  }
+
+  const venvDir = expandRemote(user, `${cfg.venvs_dir}/${sanitize(whl)}`);
+  const marker = `${venvDir}/.poseidon-ready`;
+  const check = await ssh.exec(`test -f ${shq(marker)} && echo READY || echo MISSING`);
+  if (check.stdout.includes('READY')) {
+    emit('info', `venv 已就绪: ${venvDir}`);
+    return { python: `${venvDir}/bin/python`, kind: 'venv' };
+  }
+
+  emit('phase', `首次使用 whl 版本 ${whl}：创建 venv 并安装 torch/triton（可能需要几分钟）...`);
+  const basePython = expandRemote(user, cfg.base_python);
+  const wheelDir = `${expandRemote(user, cfg.whl_dir)}/${whl}/wheel`;
+  const indexOpt = cfg.pip_index_url ? `--index-url ${shq(cfg.pip_index_url)} --trusted-host ${shq(new URL(cfg.pip_index_url).hostname)}` : '';
+
+  const steps = [
+    `rm -rf ${shq(venvDir)} && ${shq(basePython)} -m venv ${shq(venvDir)}`,
+    `${shq(`${venvDir}/bin/pip`)} install --no-cache-dir ${indexOpt} numpy sympy networkx jinja2 fsspec filelock typing_extensions setuptools`,
+    `${shq(`${venvDir}/bin/pip`)} install --no-cache-dir --no-deps ${indexOpt} ${shq(wheelDir)}/torch-*.whl ${shq(wheelDir)}/triton-*.whl`,
+    `touch ${shq(marker)}`,
+  ];
+  for (const cmd of steps) {
+    emit('log', `$ ${cmd}`);
+    const r = await ssh.execStream(cmd, { timeoutMs: 1800000, onData: (t) => emit('log', t) });
+    if (r.code !== 0) {
+      throw new Error(`venv 安装失败 (${whl})，退出码 ${r.code}。请检查 whl 目录 ${wheelDir} 与 pip 源配置。`);
+    }
+  }
+  emit('info', `venv 安装完成: ${venvDir}`);
+  return { python: `${venvDir}/bin/python`, kind: 'venv' };
+}
+
+/** 构建运行命令（注入 MACA 环境变量）。 */
+export function buildRunCommand({ python, workdir, sdkDir, rtol, atol, warmup, iters }) {
+  const cfg = config.build_machine;
+  const sdk = sdkDir && sdkDir !== 'auto' ? sdkDir : '/opt/maca';
+  const libPath = `${sdk}/lib:${sdk}/mxgpu_llvm/lib:${sdk}/ompi/lib`;
+  return [
+    `cd ${shq(workdir)}`,
+    `export MACA_PATH=${shq(sdk)}`,
+    `export LD_LIBRARY_PATH=${shq(libPath)}:$LD_LIBRARY_PATH`,
+    `export TRITON_CACHE_DIR=${shq(`${workdir}/cache`)}`,
+    `export TRITON_METAX_ENABLE_TORCH_REDUCTION_ORDER=1`,
+    `export POSEIDON_RTOL=${rtol}`,
+    `export POSEIDON_ATOL=${atol}`,
+    `export POSEIDON_WARMUP=${warmup}`,
+    `export POSEIDON_ITERS=${iters}`,
+    `${shq(python)} -u harness.py`,
+  ].join(' && ');
+}
+
+function sanitize(name) {
+  return String(name).replace(/[^a-zA-Z0-9._-]/g, '_');
+}
+
+/** 默认基准参数（从配置读取）。 */
+export function benchmarkDefaults() {
+  return {
+    warmup: config.benchmark.warmup,
+    iters: config.benchmark.iters,
+    default_rtol: config.benchmark.default_rtol,
+    default_atol: config.benchmark.default_atol,
+  };
+}
+
+/** 作业在构建机上的目录。 */
+export function jobRemoteDir(jobId) {
+  const cfg = config.build_machine;
+  return `${expandRemote(cfg.username, cfg.workdir)}/${sanitize(jobId)}`;
+}
