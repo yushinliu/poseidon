@@ -17,8 +17,10 @@
 
 ## 未验证项（保守处理）
 
-- MetaX `triton.Config` 扩展（`pipeline` / `scenario` kwargs）在本版本的 MetaX 构建上**未验证**：默认不要使用，
-  优先用 `num_warps` / `num_stages` 的常规配置；平台反馈错误后再调整。
+- MetaX `triton.Config` 扩展（`pipeline` / `scenario` kwargs）按官方手册 3.0 语法也写在 kwargs 字典内
+  （`triton.Config({..., 'pipeline': "basic"}, ...)`）；在本版本的 MetaX 构建上**未做平台实测**：
+  默认优先用 `num_warps` / `num_stages` 的常规配置，如确需 pipeline 优化可少量尝试（autotune 1~2 个候选），平台反馈错误后再调整。
+- autotune：`TRITON_PRINT_AUTOTUNING=1` 与结果持久化（`TRITON_ENABLE_PERSISTENT_AUTOTUNE_CONFIGS=1`）本机构建均支持（autotuner.py 确认）。
 
 ## 配套 torch 2.8
 

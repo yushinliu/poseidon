@@ -71,6 +71,10 @@ export function buildRunCommand({ python, workdir, sdkDir, rtol, atol, warmup, i
     `export LD_LIBRARY_PATH=${shq(libPath)}:$LD_LIBRARY_PATH`,
     `export TRITON_CACHE_DIR=${shq(`${workdir}/cache`)}`,
     `export TRITON_METAX_ENABLE_TORCH_REDUCTION_ORDER=1`,
+    // autotune：调优过程打印进度（保持看门狗活性）+ 结果持久化（跳过重复调优；3.0 支持，3.6 构建忽略该变量）
+    `export TRITON_PRINT_AUTOTUNING=1`,
+    `export TRITON_ENABLE_PERSISTENT_AUTOTUNE_CONFIGS=1`,
+    `export TRITON_AUTOTUNE_CONFIG_PATH=${shq(`${workdir}/autotune_configs`)}`,
     `export POSEIDON_RTOL=${rtol}`,
     `export POSEIDON_ATOL=${atol}`,
     `export POSEIDON_WARMUP=${warmup}`,

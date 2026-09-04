@@ -37,8 +37,19 @@ export MACA_PATH=<sdk>
 export LD_LIBRARY_PATH=<sdk>/lib:<sdk>/mxgpu_llvm/lib:<sdk>/ompi/lib:$LD_LIBRARY_PATH
 export TRITON_CACHE_DIR=<job>/cache
 export TRITON_METAX_ENABLE_TORCH_REDUCTION_ORDER=1
+export TRITON_PRINT_AUTOTUNING=1                          # autotune 调优过程打印进度（保持看门狗活性）
+export TRITON_ENABLE_PERSISTENT_AUTOTUNE_CONFIGS=1        # autotune 结果持久化（3.0 构建支持；3.6 忽略）
+export TRITON_AUTOTUNE_CONFIG_PATH=<job>/autotune_configs
 python -u harness.py
 ```
+
+### autotune 调参
+
+- skill 要求：存在可调参数（BLOCK 尺寸、num_warps、num_stages、pipeline、scenario）的 kernel **必须**使用 `@triton.autotune`
+  （参考沐曦用户指南"功能支持"章节的 MetaX `triton.Config` 扩展）。
+- 调优发生在 `run_kernel` 首次调用（即精度校验阶段），日志中可见调优进度；
+  之后基准测试直接使用最佳配置，计时不受调优影响。
+- 每次尝试前清空的 `cache` 是编译缓存；autotune 配置持久化路径（`autotune_configs`）不清空，重试可复用调优结果。
 
 ### 精度校验
 

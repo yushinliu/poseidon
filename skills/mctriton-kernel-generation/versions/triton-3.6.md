@@ -8,8 +8,9 @@
 - **`tl.dot(a, b, acc, input_precision="ieee")`**：本平台实测通过。
   默认情况下 MetaX 的 `tl.dot` 可能使用降精度模式（类似 TF32），与 torch 的 fp32 矩阵乘产生约 1e-1 量级误差；
   指定 `input_precision="ieee"` 后误差降到 1e-4 以下，与 torch 对齐。**矩阵乘类 kernel 默认带上该参数。**
-- MetaX `triton.Config` 扩展：`pipeline: "cpasync"`（异步软件流水）与 `scenario: "storeCoalesce"` 实测可用，可用于矩阵乘类 kernel。
+- MetaX `triton.Config` 扩展：`pipeline`（`"basic"`/`"cpasync"`/空串）与 `scenario`（`"flashattn-fwd"`/`"flashattn-bwd"`/`"mla"`/`"unroll"`/`"roll"`/`"unprefetch"`/`"fullstage"`/`"storeCoalesce"`，可 `";"` 组合）实测可用，**写在 kwargs 字典内**（`triton.Config({..., "pipeline": "cpasync"}, num_warps=..., num_stages=...)`），可用于矩阵乘/flashattn 类 kernel 并配合 autotune 搜索最优组合。
 - `num_warps`（1/2/4/8）、`num_stages`（1~5）常规可用。
+- autotune：`TRITON_PRINT_AUTOTUNING=1` 会打印调优进度（本机构建确认）；**本机安装的 3.6 构建不支持 autotune 结果持久化**（无 `TRITON_ENABLE_PERSISTENT_AUTOTUNE_CONFIGS`），勿依赖跨进程复用调优结果。
 
 ## 不可用 / 避免
 

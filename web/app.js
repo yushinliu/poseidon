@@ -247,10 +247,10 @@ function renderJob(job) {
   const newEvents = job.events.slice(seenEvents);
   seenEvents = job.events.length;
   for (const ev of newEvents) {
-    const line = document.createElement('span');
+    const line = document.createElement('div');
     line.className = 'line';
     const time = new Date(ev.t).toLocaleTimeString('zh-CN', { hour12: false });
-    line.innerHTML = `<span class="t">${time}</span><span class="${ev.type}">${escapeHtml(ev.message)}</span>`;
+    line.innerHTML = `<span class="t">${time}</span><span class="msg ${ev.type}">${escapeHtml(ev.message)}</span>`;
     log.appendChild(line);
   }
   // 只保留最近 400 行，避免 DOM 过大导致卡顿/叠字

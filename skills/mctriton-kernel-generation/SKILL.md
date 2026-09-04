@@ -92,13 +92,18 @@ def my_kernel(x_ptr, y_ptr, out_ptr, N, BLOCK: tl.constexpr):
 - 原子操作（谨慎使用）：`tl.atomic_add`、`tl.atomic_max`。
 - **避免使用**：`tl.make_tensor_descriptor`（Hopper TMA，MetaX 不支持）、`triton.language.extra`（CUDA libdevice 专属）、内联汇编、`tl.debug_barrier` 之外的调试设施。
 
-### 3.3 启动配置与 autotune
+### 3.3 启动配置与 autotune 自动调参（必须）
+
+只要 kernel 存在可调参数（BLOCK 尺寸、`num_warps`、`num_stages`、`pipeline`、`scenario` 等），
+**必须**使用 `@triton.autotune` 在运行时自动调参，禁止只写死一组配置。参考沐曦官方用户指南
+"功能支持"章节（https://developer.metax-tech.com/api/client/document/preview/1329/split_files/功能支持.html）。
 
 ```python
 @triton.autotune(
     configs=[
-        triton.Config({"BLOCK_SIZE": 128, "GROUP_SIZE_M": 8}, num_warps=4, num_stages=3),
-        triton.Config({"BLOCK_SIZE": 256, "GROUP_SIZE_M": 8}, num_warps=8, num_stages=4),
+        triton.Config({"BLOCK_M": 64, "BLOCK_N": 64, "BLOCK_K": 32, "GROUP_M": 8}, num_warps=4, num_stages=3),
+        triton.Config({"BLOCK_M": 128, "BLOCK_N": 128, "BLOCK_K": 32, "GROUP_M": 8, "pipeline": "cpasync", "scenario": "storeCoalesce"}, num_warps=4, num_stages=4),
+        triton.Config({"BLOCK_M": 128, "BLOCK_N": 64, "BLOCK_K": 64, "GROUP_M": 8, "pipeline": "basic", "scenario": "unroll"}, num_warps=8, num_stages=2),
     ],
     key=["M", "N", "K"],
 )
@@ -107,10 +112,18 @@ def matmul_kernel(...):
     ...
 ```
 
-- MetaX 扩展：`triton.Config` 的 kwargs 支持 `pipeline: "cpasync"`（异步软件流水）与 `scenario: "storeCoalesce"`，可用于矩阵乘类 kernel。
-- `num_warps` 取 1/2/4/8；`num_stages` 取 1~5（软件流水深度，增大可隐藏访存延迟，但占用共享内存）。
-- `run_kernel` 中启动：`kernel[grid](args...)`，grid 为 `(blocks,)` 或 `(bx, by, bz)`。
-- 保守起见默认用简单配置（BLOCK=128/256, num_warps=4, num_stages=2）；autotune 只在矩阵乘等重计算 kernel 上使用。
+规则：
+
+- **configs 数量 2~6 个**：每个 config 都要 JIT 编译一次并做基准测试，过多会显著拖慢任务甚至触发超时；
+- `key` 用运行时标量参数（如 `key=["M", "N", "K"]`），不要用 constexpr 参数做 key；
+- `num_warps` 取 1/2/4/8，`num_stages` 取 1~5；
+- **MetaX 扩展（triton 3.x 语法：写在 `triton.Config` 的 kwargs 字典里）**：
+  - `pipeline`：`"basic"`（默认，N-buffer 优化）、`"cpasync"`（cp.async 全局内存直拷共享内存流水，`num_stages` 增大时共享内存占用变大）、不设置/空串=关闭 N-buffer 优化；
+  - `scenario`（可与 pipeline 组合）：`"flashattn-fwd"`（flashattn 前向类）、`"flashattn-bwd"`（flashattn 反向类）、`"mla"`（MLA/extendattn 前向类）、`"unroll"`、`"roll"`、`"unprefetch"`、`"fullstage"`、`"storeCoalesce"`（写回大位宽合并）。多个用 `";"` 组合（如 `"unprefetch;roll;fullstage"`）；
+  - **冲突组合禁止**：`flashattn-fwd` / `flashattn-bwd` / `mla` 三者互斥；`unroll` 与 `roll` 互斥；
+  - 场景建议：flashattn 前向参考 → 一个 config 带 `scenario="flashattn-fwd"`；flashattn 反向 → `"flashattn-bwd"`；矩阵乘/密集写回 → `"storeCoalesce"`。把不同 pipeline/scenario 组合做成不同 config，交给 autotune 搜索最优；
+- `run_kernel` 中启动：`kernel[grid](args...)`，grid 为 `(blocks,)` 或 `(bx, by, bz)`；
+- 平台运行时已开启 autotune 进度打印与结果持久化：`run_kernel` 首次调用会自动执行调优（日志可见），后续调用直接使用最佳配置；不要把调优逻辑写进 `run_kernel`。
 
 ### 3.4 常见 torch → Triton 映射模板
 

@@ -8,12 +8,23 @@
 | API | 说明 |
 |---|---|
 | `@triton.jit` | 装饰 Python 函数为 JIT kernel |
-| `@triton.autotune(configs=[...], key=[...])` | 按 key（标量参数名）自动选择最优 config |
-| `triton.Config(kwargs, num_warps=4, num_stages=2)` | 启动配置；MetaX 扩展 kwargs：`pipeline: "cpasync"`、`scenario: "storeCoalesce"` |
+| `@triton.autotune(configs=[...], key=[...])` | 按 key（运行时标量参数名）自动选择最优 config；平台强制要求可调参数使用 autotune |
+| `triton.Config(kwargs, num_warps=4, num_stages=2)` | 启动配置；MetaX 扩展参数写在 kwargs 字典内（triton 3.x 语法），见下表 |
 | `triton.cdiv(a, b)` | 向上取整除 |
 | `triton.next_power_of_2(n)` | 下一个 2 的幂 |
 | `triton.runtime.driver.active.get_active_torch_device()` | 获取当前设备（返回 `cuda:0`）。**仅 triton 3.6 可用**；3.0 请用 `torch.device("cuda", torch.cuda.current_device())` |
 | `kernel[(grid,)](args...)` | 启动 kernel，grid 为 1~3 维 tuple |
+
+### triton.Config MetaX 扩展参数（来源：沐曦 mcTriton 用户指南"功能支持"章节）
+
+| kwargs 键 | 取值 | 说明 |
+|---|---|---|
+| `pipeline` | `"basic"`（默认）/ `"cpasync"` / 空串 | N-buffer 软件流水优化：`basic` 寄存器缓冲；`cpasync` 用 cp.async 全局内存直拷共享内存（`num_stages` 越大共享内存占用越大）；空串关闭 |
+| `scenario` | `"flashattn-fwd"` / `"flashattn-bwd"` / `"mla"` / `"unroll"` / `"roll"` / `"unprefetch"` / `"fullstage"` / `"storeCoalesce"` | 编译重排与指令优化；多个用 `";"` 组合（如 `"unprefetch;roll;fullstage"`）；冲突组合禁止：flashattn-fwd/flashattn-bwd/mla 互斥、unroll/roll 互斥 |
+
+- 不同 kernel 的最优 `pipeline`/`scenario` 不同，官方建议**配合 `triton.autotune` 搜索**（把不同组合做成不同 config）。
+- autotune 运行时调优：`run_kernel` 首次调用自动执行（平台开启 `TRITON_PRINT_AUTOTUNING=1` 打印进度）；结果可持久化（`TRITON_ENABLE_PERSISTENT_AUTOTUNE_CONFIGS=1`，3.0 构建支持，3.6 构建无此功能）。
+- 指南原文：https://developer.metax-tech.com/api/client/document/preview/1329/split_files/功能支持.html
 
 ## triton.language 核心
 

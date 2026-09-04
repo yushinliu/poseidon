@@ -154,17 +154,28 @@ button.cancel:hover { background: rgba(248, 81, 73, .12); }
   font-family: var(--mono);
   font-size: 12px;
   line-height: 1.65;
-  white-space: pre-wrap;
-  word-break: break-all;
 }
-.log .line { display: block; margin: 2px 0; }
-.log .t { color: #484f58; margin-right: 8px; }
-.log .info { color: var(--dim); }
-.log .phase { color: #79c0ff; font-weight: 700; }
-.log .llm { color: #d2a8ff; }
-.log .warn { color: var(--warn); }
-.log .error { color: var(--err); }
-.log .result { color: var(--ok); font-weight: 700; }
+/* 每行：时间戳固定列 + 消息独立列（flex 布局，长行在消息列内自行换行，不与时间戳/相邻行重叠） */
+.log .line {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 3px 0;
+}
+.log .t { flex: none; color: #484f58; padding-top: 1px; }
+.log .msg {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.log .msg.info { color: var(--dim); }
+.log .msg.phase { color: #79c0ff; font-weight: 700; }
+.log .msg.llm { color: #d2a8ff; }
+.log .msg.warn { color: var(--warn); }
+.log .msg.error { color: var(--err); }
+.log .msg.result { color: var(--ok); font-weight: 700; }
 
 #job-result { margin-top: 12px; }
 .result-grid {
