@@ -73,9 +73,10 @@ export function buildRunCommand({ python, workdir, sdkDir, rtol, atol, warmup, i
     `export POSEIDON_WARMUP=${warmup}`,
     `export POSEIDON_ITERS=${iters}`,
   ].join(' && ');
-  // ( ... ) & 使整个命令在子 shell 后台运行，$! 即其 pid；exec 让 python 直接取代子 shell，
-  // 保证 kill pid 能命中 python 进程。wait $! 使本命令随 python 退出而结束。
-  return `cd ${shq(workdir)} && ( ${env} && exec ${shq(python)} -u harness.py ) & echo $! > ${shq(`${workdir}/run.pid`)}; wait $!`;
+  // ( cd && export ... && exec python ) &  整体在单个子 shell 中后台运行；
+  // exec 使 python 直接取代该子 shell，因此 $!（写入 run.pid）就是 python 进程本身，
+  // 看门狗/中断时 kill $(cat run.pid) 可精准命中。wait $! 使本命令随 python 退出而结束。
+  return `( cd ${shq(workdir)} && ${env} && exec ${shq(python)} -u harness.py ) & echo $! > ${shq(`${workdir}/run.pid`)}; wait $!`;
 }
 
 function sanitize(name) {

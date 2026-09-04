@@ -67,7 +67,8 @@ export class SshSession {
 
       const killRemote = () => {
         if (!pidFile) return;
-        const killCmd = `pkill -9 -P "$(cat ${pidFile} 2>/dev/null)" 2>/dev/null; kill -9 "$(cat ${pidFile} 2>/dev/null)" 2>/dev/null; echo KILLED`;
+        // [h]arness.py 括号技巧：模式不会匹配 kill 命令自身
+        const killCmd = `pkill -9 -P "$(cat '${pidFile}' 2>/dev/null)" 2>/dev/null; kill -9 "$(cat '${pidFile}' 2>/dev/null)" 2>/dev/null; pkill -9 -f '[h]arness.py' 2>/dev/null; echo KILLED`;
         this.client.exec(killCmd, () => { /* 尽力而为 */ });
       };
 
