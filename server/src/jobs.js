@@ -41,6 +41,25 @@ export function getJob(id) {
   return jobs.get(id) || null;
 }
 
+/** 中断任务：排队中 → 直接出队取消；运行中 → 置取消标记（运行流程会强杀远端进程并结束）。 */
+export function cancelJob(id) {
+  const job = jobs.get(id);
+  if (!job) return { ok: false, error: '作业不存在' };
+  if (job.status === 'success' || job.status === 'failed' || job.status === 'cancelled') {
+    return { ok: false, error: `作业已结束（${job.status}），无需中断` };
+  }
+  job.cancelled = true;
+  job.events.push({ t: Date.now(), type: 'warn', message: '收到中断请求，正在终止任务...' });
+  if (job.status === 'queued') {
+    const idx = queue.indexOf(id);
+    if (idx >= 0) queue.splice(idx, 1);
+    job.status = 'cancelled';
+    job.finished_at = Date.now();
+    persistJob(job);
+  }
+  return { ok: true, status: job.status };
+}
+
 export function listJobs() {
   return [...jobs.values()]
     .map(publicView)
@@ -54,7 +73,12 @@ function publicView(job) {
 
 async function pump() {
   if (running) return;
-  const id = queue.shift();
+  let id = queue.shift();
+  while (id) {
+    const j = jobs.get(id);
+    if (j && !j.cancelled) break;
+    id = queue.shift();
+  }
   if (!id) return;
   const job = jobs.get(id);
   if (!job) { setImmediate(pump); return; }

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { config } from '../config.js';
 import { getCatalog } from './catalog.js';
-import { createJob, getJob, listJobs } from '../jobs.js';
+import { createJob, getJob, listJobs, cancelJob } from '../jobs.js';
 import { loadSkillPrompt } from '../skills.js';
 
 export const api = Router();
@@ -47,4 +47,10 @@ api.get('/jobs/:id', (req, res) => {
   if (!job) return res.status(404).json({ error: '作业不存在' });
   const { torch_code, ...rest } = job;
   res.json({ ...rest, torch_code_len: torch_code.length });
+});
+
+api.post('/jobs/:id/cancel', (req, res) => {
+  const r = cancelJob(req.params.id);
+  if (!r.ok) return res.status(400).json(r);
+  res.json(r);
 });

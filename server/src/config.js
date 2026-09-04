@@ -30,6 +30,7 @@ const DEFAULTS = {
     pip_index_url: '',
     python_overrides: {},
     run_timeout_ms: 900000,
+    stall_timeout_ms: 240000,
     connect_timeout_ms: 20000,
   },
   benchmark: { warmup: 5, iters: 50, default_rtol: 0.02, default_atol: 0.02 },

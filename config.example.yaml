@@ -33,7 +33,8 @@ build_machine:
   # 指定 whl 版本直接使用已有解释器（跳过 venv 创建）：
   python_overrides:
     "3.7.1.3-dsv4": ~/miniforge3/envs/yuliu/bin/python
-  run_timeout_ms: 900000                     # 单次运行（编译+精度+性能）超时
+  run_timeout_ms: 900000                     # 单次运行（编译+精度+性能）总超时
+  stall_timeout_ms: 240000                   # 无输出停滞超时：超时先强杀远端进程（释放 GPU）再自动重试
   connect_timeout_ms: 20000
 
 benchmark:

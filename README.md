@@ -1,4 +1,4 @@
-# Poseidon ⚡
+# Poseidon 🔱
 
 基于沐曦（MetaX）GPU 的 **mcTriton kernel 自动生成与性能测试 Web 平台**。
 

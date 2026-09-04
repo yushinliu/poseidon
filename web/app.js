@@ -44,6 +44,7 @@ async function init() {
   loadPrefs();
   $('sel-example').addEventListener('change', onExample);
   $('btn-run').addEventListener('click', onRun);
+  $('btn-cancel').addEventListener('click', onCancel);
   addEventListener('beforeunload', savePrefs);
 
   try {
@@ -179,7 +180,7 @@ async function poll() {
   try {
     const job = await fetch(`/api/jobs/${currentJobId}`).then((r) => r.json());
     renderJob(job);
-    if (job.status === 'success' || job.status === 'failed') {
+    if (job.status === 'success' || job.status === 'failed' || job.status === 'cancelled') {
       stopPolling();
       refreshHistory();
     }
@@ -188,9 +189,27 @@ async function poll() {
 
 function setStatus(s) {
   const el = $('job-status');
-  const map = { queued: '排队中', running: '运行中', success: '成功', failed: '失败' };
+  const map = { queued: '排队中', running: '运行中', success: '成功', failed: '失败', cancelled: '已中断' };
   el.textContent = map[s] || s;
   el.className = `badge ${s}`;
+  $('btn-cancel').hidden = !(s === 'queued' || s === 'running');
+}
+
+async function onCancel() {
+  if (!currentJobId) return;
+  const btn = $('btn-cancel');
+  btn.disabled = true;
+  btn.textContent = '中断中…';
+  try {
+    const r = await fetch(`/api/jobs/${currentJobId}/cancel`, { method: 'POST' });
+    const data = await r.json();
+    if (!r.ok) { alert(`中断失败：${data.error || r.status}`); btn.disabled = false; btn.textContent = '⏹ 中断任务'; return; }
+    poll();
+  } catch (e) {
+    alert(`中断失败：${e.message}`);
+    btn.disabled = false;
+    btn.textContent = '⏹ 中断任务';
+  }
 }
 
 function renderJob(job) {

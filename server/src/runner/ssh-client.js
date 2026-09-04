@@ -44,32 +44,81 @@ export class SshSession {
         let stderr = '';
         stream.on('data', (d) => { stdout += d; });
         stream.stderr.on('data', (d) => { stderr += d; });
-        stream.on('close', (code) => {
+        stream.on('close', (code, signal) => {
           clearTimeout(timer);
-          resolve({ code, stdout, stderr });
+          resolve({ code, signal, stdout, stderr });
         });
         stream.on('error', (e) => { clearTimeout(timer); reject(new Error(`流错误: ${e.message}`)); });
       });
     });
   }
 
-  /** 执行命令并流式回调输出（用于实时日志）。返回 { code, stdout, stderr }。 */
-  execStream(cmd, { timeoutMs = 600000, onData = () => {} } = {}) {
+  /**
+   * 执行命令并流式回调输出。
+   * - timeoutMs: 总超时（超时前会先强杀远端进程再 reject）
+   * - stallTimeoutMs: 无输出停滞超时（同样先强杀再 reject，用于"卡住自动重跑"）
+   * - isCancelled: () => boolean，为 true 时强杀远端进程并 reject(CancelledError)
+   * - pidFile: 远端 pid 文件路径（由包装命令写入，用于精准强杀）
+   */
+  execStream(cmd, { timeoutMs = 600000, stallTimeoutMs = 0, isCancelled = () => false, pidFile = null, onData = () => {} } = {}) {
     return new Promise((resolve, reject) => {
+      let settled = false;
+      let lastActivity = Date.now();
+
+      const killRemote = () => {
+        if (!pidFile) return;
+        const killCmd = `pkill -9 -P "$(cat ${pidFile} 2>/dev/null)" 2>/dev/null; kill -9 "$(cat ${pidFile} 2>/dev/null)" 2>/dev/null; echo KILLED`;
+        this.client.exec(killCmd, () => { /* 尽力而为 */ });
+      };
+
+      const settleReject = (err) => {
+        if (settled) return;
+        settled = true;
+        killRemote();
+        clearInterval(watchdog);
+        clearTimeout(timer);
+        reject(err);
+      };
+
       const timer = setTimeout(() => {
-        reject(new Error(`命令执行超时 (${Math.round(timeoutMs / 1000)}s)`));
+        settleReject(new Error(`命令执行超时 (${Math.round(timeoutMs / 1000)}s)，已终止远端进程`));
       }, timeoutMs);
+
+      const watchdog = setInterval(() => {
+        if (settled) return;
+        if (isCancelled()) {
+          settleReject(new CancelledError('任务已中断，已终止远端进程'));
+          return;
+        }
+        if (stallTimeoutMs > 0 && Date.now() - lastActivity > stallTimeoutMs) {
+          settleReject(new Error(`执行停滞超过 ${Math.round(stallTimeoutMs / 1000)}s 无输出，已终止远端进程并准备自动重试`));
+        }
+      }, 1000);
+
       this.client.exec(cmd, (err, stream) => {
-        if (err) { clearTimeout(timer); reject(new Error(`exec 失败: ${err.message}`)); return; }
+        if (err) { settleReject(new Error(`exec 失败: ${err.message}`)); return; }
         let stdout = '';
         let stderr = '';
-        stream.on('data', (d) => { stdout += d; onData(d.toString()); });
-        stream.stderr.on('data', (d) => { stderr += d; onData(d.toString()); });
-        stream.on('close', (code) => {
-          clearTimeout(timer);
-          resolve({ code, stdout, stderr });
+        stream.on('data', (d) => {
+          lastActivity = Date.now();
+          stdout += d;
+          onData(d.toString());
         });
-        stream.on('error', (e) => { clearTimeout(timer); reject(new Error(`流错误: ${e.message}`)); });
+        stream.stderr.on('data', (d) => {
+          lastActivity = Date.now();
+          stderr += d;
+          onData(d.toString());
+        });
+        stream.on('close', (code, signal) => {
+          if (settled) return;
+          settled = true;
+          clearInterval(watchdog);
+          clearTimeout(timer);
+          resolve({ code, signal, stdout, stderr });
+        });
+        stream.on('error', (e) => {
+          settleReject(new Error(`流错误: ${e.message}`));
+        });
       });
     });
   }
@@ -86,15 +135,14 @@ export class SshSession {
   }
 
   _mkdirP(sftp, dir) {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const parts = dir.split('/').filter(Boolean);
       let cur = dir.startsWith('/') ? '/' : '';
       const step = (i) => {
         if (i >= parts.length) return resolve();
         cur = cur === '/' ? `/${parts[i]}` : `${cur}/${parts[i]}`;
         sftp.mkdir(cur, (err) => {
-          // EEXIST(4) 或 SFTP 状态 4 视为已存在
-          step(i + 1);
+          step(i + 1); // EEXIST 视为已存在
         });
       };
       step(0);
@@ -116,6 +164,14 @@ export class SshSession {
     return new Promise((resolve, reject) => {
       sftp.readFile(remotePath, (err, data) => (err ? reject(new Error(`读取失败 ${remotePath}: ${err.message}`)) : resolve(data.toString('utf8'))));
     });
+  }
+}
+
+export class CancelledError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'CancelledError';
+    this.cancelled = true;
   }
 }
 

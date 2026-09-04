@@ -118,6 +118,17 @@ button.run:hover { filter: brightness(1.15); }
 button.run:disabled { filter: grayscale(.7); cursor: not-allowed; }
 
 .job-head { display: flex; align-items: center; justify-content: space-between; }
+.job-head-right { display: flex; align-items: center; gap: 10px; }
+button.cancel {
+  background: transparent;
+  border: 1px solid var(--err);
+  color: var(--err);
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+button.cancel:hover { background: rgba(248, 81, 73, .12); }
 .badge {
   padding: 4px 12px;
   border-radius: 20px;
@@ -130,6 +141,7 @@ button.run:disabled { filter: grayscale(.7); cursor: not-allowed; }
 .badge.success { color: var(--ok); border-color: var(--ok); }
 .badge.failed { color: var(--err); border-color: var(--err); }
 .badge.queued { color: var(--warn); border-color: var(--warn); }
+.badge.cancelled { color: #f0883e; border-color: #f0883e; }
 @keyframes pulse { 50% { opacity: .55; } }
 
 .log {
@@ -233,6 +245,7 @@ code-block {
 .history-item .dot.failed { background: var(--err); }
 .history-item .dot.running { background: #79c0ff; }
 .history-item .dot.queued { background: var(--warn); }
+.history-item .dot.cancelled { background: #f0883e; }
 .history-item .meta { color: var(--dim); margin-left: auto; font-size: 11px; }
 .history-empty { color: var(--dim); font-size: 12px; }
 

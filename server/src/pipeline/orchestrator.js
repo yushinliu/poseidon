@@ -39,7 +39,10 @@ export function buildFixPrompt(phase, errorText) {
 }
 
 /**
- * 执行一个作业：连接构建机 → 生成 kernel → 精度校验 → 性能测试，失败自动修复重试。
+ * 执行一个作业：连接构建机 → 生成 kernel → 精度校验 → 性能测试。
+ * - 失败自动修复重试（LLM 反馈闭环）；
+ * - 无输出停滞（stall）或超时会先强杀远端进程（释放 GPU）再自动重试；
+ * - 支持用户中断（job.cancelled）。
  * @param {object} job 作业对象（含 events 数组、状态字段）
  */
 export async function runJob(job) {
@@ -49,17 +52,25 @@ export async function runJob(job) {
     job.events.push({ t: Date.now(), type, message: String(message), ...extra });
     if (job.events.length > 800) job.events.splice(0, job.events.length - 800);
   };
+  const isCancelled = () => Boolean(job.cancelled);
+  const checkCancelled = () => {
+    if (!job.cancelled) return;
+    job.status = 'cancelled';
+    emit('warn', '任务已中断');
+  };
 
   const ssh = new SshSession(cfg);
   try {
     emit('info', `连接构建机 ${cfg.host}:${cfg.port} ...`);
     await ssh.connect();
     emit('info', '构建机连接成功');
+    if (job.cancelled) { checkCancelled(); return; }
 
     const workdir = jobRemoteDir(job.id);
     await ssh.exec(`mkdir -p '${workdir}'`);
 
-    const { python } = await ensurePython(ssh, job.whl, emit);
+    const { python } = await ensurePython(ssh, job.whl, emit, isCancelled);
+    if (job.cancelled) { checkCancelled(); return; }
 
     const messages = [
       { role: 'system', content: loadSkillPrompt() },
@@ -69,9 +80,23 @@ export async function runJob(job) {
     const llm = new LLMClient({ model: job.model });
 
     for (let attempt = 0; attempt <= job.maxRetries; attempt++) {
+      if (job.cancelled) { checkCancelled(); return; }
       job.attempts.push({ attempt: attempt + 1, phase: 'llm' });
       emit('phase', attempt === 0 ? '① LLM 生成 mcTriton kernel ...' : `① 第 ${attempt} 次修复：LLM 重新生成 ...`);
-      const resp = await llm.chat(messages, { json: true });
+
+      let lastProgress = 0;
+      const resp = await llm.chat(messages, {
+        json: true,
+        isCancelled,
+        onProgress: (p) => {
+          const now = Date.now();
+          if (now - lastProgress > 10000) {
+            lastProgress = now;
+            emit('info', `LLM 生成中…（已输出 ${p.contentLen} 字符代码，推理 ${p.reasoningLen} 字符）`);
+          }
+        },
+      });
+      if (job.cancelled) { checkCancelled(); return; }
       emit('llm', `模型 ${job.model} 已回复（${resp.usage?.total_tokens ?? '?'} tokens，推理 ${resp.usage?.completion_tokens_details?.reasoning_tokens ?? 0} tokens）`, {
         tokens: resp.usage?.total_tokens,
         reasoningTokens: resp.usage?.completion_tokens_details?.reasoning_tokens ?? 0,
@@ -82,6 +107,7 @@ export async function runJob(job) {
         gen = validateGeneration(extractJson(resp.content));
       } catch (e) {
         emit('error', `LLM 回复格式不符合协议: ${e.message}`);
+        if (job.cancelled) { checkCancelled(); return; }
         if (attempt >= job.maxRetries) {
           job.status = 'failed';
           job.error = e.message;
@@ -123,25 +149,33 @@ export async function runJob(job) {
         warmup: job.warmup ?? bench.warmup,
         iters: job.iters ?? bench.iters,
       });
+      // 每次尝试前清空编译缓存，避免上一次异常（崩溃/挂起）残留的脏缓存导致复现
+      await ssh.exec(`rm -rf ${workdir}/cache`).catch(() => {});
       emit('phase', `② 构建机编译并运行（${job.whl} @ ${job.gpu}，第 ${attempt + 1} 次尝试）...`);
+      emit('info', `无输出停滞超过 ${Math.round((cfg.stall_timeout_ms ?? 240000) / 1000)}s 将自动终止并重试`);
       job.attempts[job.attempts.length - 1].phase = 'run';
 
       let run;
       try {
         run = await ssh.execStream(cmd, {
           timeoutMs: cfg.run_timeout_ms,
+          stallTimeoutMs: cfg.stall_timeout_ms ?? 240000,
+          isCancelled,
+          pidFile: `${workdir}/run.pid`,
           onData: (t) => emit('log', t),
         });
       } catch (e) {
+        if (job.cancelled) { checkCancelled(); return; }
         emit('error', `运行异常: ${e.message}`);
         if (attempt >= job.maxRetries) {
           job.status = 'failed';
           job.error = e.message;
           return;
         }
-        messages.push({ role: 'user', content: buildFixPrompt('run', `${e.message}\n（可能原因：kernel 死循环/死锁、编译超时、共享内存超限）`) });
+        messages.push({ role: 'user', content: buildFixPrompt('run', `${e.message}\n（可能原因：kernel 死循环/死锁、编译挂起、共享内存超限；远端进程已被终止，请修复后重试）`) });
         continue;
       }
+      if (job.cancelled) { checkCancelled(); return; }
 
       const result = parseResult(run.stdout);
       if (result && result.ok) {
@@ -157,7 +191,16 @@ export async function runJob(job) {
 
       // 失败处理
       const phase = result?.phase || 'run';
-      const errMsg = result?.error || (run.code !== 0 ? `进程退出码 ${run.code}` : '无法解析测试结果');
+      let errMsg;
+      if (result?.error) {
+        errMsg = result.error;
+      } else if (run.code === null || run.code === undefined) {
+        errMsg = `进程被信号终止${run.signal ? ` (${run.signal})` : ''}（内核崩溃/段错误/被杀死）`;
+      } else if (run.code !== 0) {
+        errMsg = `进程退出码 ${run.code}`;
+      } else {
+        errMsg = '无法解析测试结果';
+      }
       const accDetail = result?.accuracy?.outputs
         ? `\n[精度指标]\n${JSON.stringify(result.accuracy.outputs, null, 2)}`
         : '';
@@ -173,6 +216,7 @@ export async function runJob(job) {
       if (phase === 'reference') {
         emit('warn', '参考实现本身运行失败——请检查输入的 torch 代码是否完整可运行。');
       }
+      if (job.cancelled) { checkCancelled(); return; }
       if (attempt >= job.maxRetries) {
         job.status = 'failed';
         job.error = `最终失败于 ${phase} 阶段: ${errMsg}`;
@@ -183,9 +227,14 @@ export async function runJob(job) {
       messages.push({ role: 'user', content: buildFixPrompt(phase, detail) });
     }
   } catch (e) {
-    job.status = 'failed';
-    job.error = e.message;
-    emit('error', `作业异常终止: ${e.message}`);
+    if (job.cancelled) {
+      job.status = 'cancelled';
+      emit('warn', '任务已中断');
+    } else {
+      job.status = 'failed';
+      job.error = e.message;
+      emit('error', `作业异常终止: ${e.message}`);
+    }
   } finally {
     ssh.close();
   }

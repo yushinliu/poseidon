@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Poseidon · 沐曦 mcTriton Kernel 生成平台</title>
+<title>🔱 Poseidon · 沐曦 mcTriton Kernel 生成平台</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header>
-  <div class="logo">⚡ Poseidon</div>
+  <div class="logo">🔱 Poseidon</div>
   <div class="subtitle">沐曦（MetaX）GPU · mcTriton Kernel 自动生成与性能测试平台</div>
   <div id="health" class="health">连接中…</div>
 </header>
@@ -71,7 +71,10 @@
     <div class="card" id="job-card" hidden>
       <div class="job-head">
         <h2 id="job-title">任务</h2>
-        <span id="job-status" class="badge">—</span>
+        <div class="job-head-right">
+          <button id="btn-cancel" class="cancel" hidden>⏹ 中断任务</button>
+          <span id="job-status" class="badge">—</span>
+        </div>
       </div>
       <div id="job-log" class="log"></div>
       <div id="job-result"></div>

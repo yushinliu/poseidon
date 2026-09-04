@@ -15,7 +15,7 @@ export function expandRemote(user, p) {
  * - 否则在 venvs_dir/<whl> 创建 venv 并安装该版本的 torch/triton wheel。
  * 返回 { python, kind: 'override'|'venv' }。
  */
-export async function ensurePython(ssh, whl, emit) {
+export async function ensurePython(ssh, whl, emit, isCancelled = () => false) {
   const cfg = config.build_machine;
   const user = cfg.username;
   const override = cfg.python_overrides?.[whl];
@@ -47,8 +47,9 @@ export async function ensurePython(ssh, whl, emit) {
     `touch ${shq(marker)}`,
   ];
   for (const cmd of steps) {
+    if (isCancelled()) throw new Error('任务已中断');
     emit('log', `$ ${cmd}`);
-    const r = await ssh.execStream(cmd, { timeoutMs: 1800000, onData: (t) => emit('log', t) });
+    const r = await ssh.execStream(cmd, { timeoutMs: 1800000, isCancelled, onData: (t) => emit('log', t) });
     if (r.code !== 0) {
       throw new Error(`venv 安装失败 (${whl})，退出码 ${r.code}。请检查 whl 目录 ${wheelDir} 与 pip 源配置。`);
     }
@@ -57,13 +58,12 @@ export async function ensurePython(ssh, whl, emit) {
   return { python: `${venvDir}/bin/python`, kind: 'venv' };
 }
 
-/** 构建运行命令（注入 MACA 环境变量）。 */
+/** 构建运行命令（注入 MACA 环境变量；后台化并记录 pid，便于看门狗/中断时强杀远端进程）。 */
 export function buildRunCommand({ python, workdir, sdkDir, rtol, atol, warmup, iters }) {
   const cfg = config.build_machine;
   const sdk = sdkDir && sdkDir !== 'auto' ? sdkDir : '/opt/maca';
   const libPath = `${sdk}/lib:${sdk}/mxgpu_llvm/lib:${sdk}/ompi/lib`;
-  return [
-    `cd ${shq(workdir)}`,
+  const env = [
     `export MACA_PATH=${shq(sdk)}`,
     `export LD_LIBRARY_PATH=${shq(libPath)}:$LD_LIBRARY_PATH`,
     `export TRITON_CACHE_DIR=${shq(`${workdir}/cache`)}`,
@@ -72,8 +72,10 @@ export function buildRunCommand({ python, workdir, sdkDir, rtol, atol, warmup, i
     `export POSEIDON_ATOL=${atol}`,
     `export POSEIDON_WARMUP=${warmup}`,
     `export POSEIDON_ITERS=${iters}`,
-    `${shq(python)} -u harness.py`,
   ].join(' && ');
+  // ( ... ) & 使整个命令在子 shell 后台运行，$! 即其 pid；exec 让 python 直接取代子 shell，
+  // 保证 kill pid 能命中 python 进程。wait $! 使本命令随 python 退出而结束。
+  return `cd ${shq(workdir)} && ( ${env} && exec ${shq(python)} -u harness.py ) & echo $! > ${shq(`${workdir}/run.pid`)}; wait $!`;
 }
 
 function sanitize(name) {
