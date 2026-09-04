@@ -67,11 +67,11 @@ async function init() {
 }
 
 function populateSelects() {
-  const fill = (sel, items, { valueKey = 'id', labelFn = (it) => it.name } = {}) => {
+  const fill = (sel, items, { valueKey = 'id', labelFn = (it) => (typeof it === 'string' ? it : it.name) } = {}) => {
     sel.innerHTML = '';
     for (const it of items) {
       const o = document.createElement('option');
-      o.value = it[valueKey];
+      o.value = typeof it === 'string' ? it : it[valueKey];
       o.textContent = labelFn(it);
       sel.appendChild(o);
     }
@@ -80,7 +80,7 @@ function populateSelects() {
   fill($('sel-gpu'), catalog.devices);
   fill($('sel-sdk'), catalog.sdks, { valueKey: 'path', labelFn: (s) => `${s.path}（${s.version}）` });
   fill($('sel-whl'), catalog.whls, { labelFn: (w) => w.torch ? `${w.id}（${w.torch.replace('.whl', '').replace('torch-', 'torch ')} / ${w.triton.replace('.whl', '').replace('triton-', 'triton ')}）` : w.id });
-  fill($('sel-model'), catalog.models, { valueKey: 'self', labelFn: (m) => m });
+  fill($('sel-model'), catalog.models, { labelFn: (m) => m });
 
   const prefs = JSON.parse(localStorage.getItem('poseidon-prefs') || '{}');
   if (prefs.gpu && $('sel-gpu').querySelector(`option[value="${prefs.gpu}"]`)) $('sel-gpu').value = prefs.gpu;
