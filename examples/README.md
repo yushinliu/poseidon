@@ -10,6 +10,11 @@
 | 矩阵乘 | `matmul/input.py` | `tl.dot` 类重计算算子 |
 | GELU | `gelu/input.py` | 激活函数 |
 | LayerNorm | `layernorm/input.py` | 带参数的规约算子 |
+| FlashAttention 前向 | `flashattn_fwd/input.py` | 无因果掩码的标准注意力前向（softmax + 两次矩阵乘），难度高 |
+| FlashAttention 反向 | `flashattn_bwd/input.py` | 返回 dq/dk/dv 三路梯度，难度高；受"单 kernel 铁律"约束，模型可能需要多轮修复 |
+
+> 注意：flash 注意力类参考实现受平台"一个 torch_fn 只对应一个 triton kernel"约束，属于高难度生成任务，
+> 模型可能多轮修复后仍无法满足精度；可适当放宽 rtol/atol 或调大最大修复轮次。
 
 ## 在 Web UI 中使用
 

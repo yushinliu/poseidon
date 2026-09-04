@@ -9,6 +9,15 @@ server:
   host: 0.0.0.0            # 监听地址
   port: 8000               # Web 端口，环境变量 POSEIDON_PORT
 
+kernel_types:              # 可输出的 kernel 类型（Web 运行配置下拉框；skill 对应 skills/ 目录名）
+  - id: mctriton
+    name: mcTriton
+    skill: mctriton-kernel-generation
+  # 新增类型示例：在 skills/ 下新建对应 skill 目录后在此登记
+  # - id: <类型id>
+  #   name: <显示名>
+  #   skill: <skill目录名>
+
 llm:
   base_url: https://api.deepseek.com        # POSEIDON_LLM_BASE_URL
   api_key: "sk-xxxxxxxx"                    # POSEIDON_LLM_API_KEY（必填）

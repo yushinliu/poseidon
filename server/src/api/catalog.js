@@ -25,6 +25,7 @@ export async function getCatalog() {
     sdks: [],
     whls: [],
     models: DEFAULT_MODELS,
+    kernel_types: config.kernel_types || [{ id: 'mctriton', name: 'mcTriton' }],
   };
 
   try {

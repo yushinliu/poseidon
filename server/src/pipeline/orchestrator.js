@@ -9,9 +9,10 @@ import { buildHarness, parseResult } from '../runner/harness.js';
 /** 构建首次生成的 user 消息。 */
 export function buildTaskPrompt(job) {
   return [
-    '请为以下 torch 参考实现生成等价的 mcTriton kernel，并设计测试输入。',
+    '请为以下 torch 参考实现生成等价的 kernel，并设计测试输入。',
     '',
     '【目标环境】',
+    `- Kernel 类型: ${job.kernel_type_name || job.kernel_type}`,
     `- GPU: ${job.gpu || 'MetaX C500'}`,
     `- MACA SDK: ${job.sdk}`,
     `- whl 版本: ${job.whl}`,
@@ -72,9 +73,9 @@ export async function runJob(job) {
     const { python } = await ensurePython(ssh, job.whl, emit, isCancelled, job.sdk);
     if (job.cancelled) { checkCancelled(); return; }
 
-    const skill = loadSkillPrompt(job.skill_versions);
+    const skill = loadSkillPrompt(job.skill_versions, job.kernel_type);
     const sv = job.skill_versions || {};
-    emit('info', `skill 版本适配: triton ${sv.triton_major || '通用'} / SDK ${sv.sdk_minor || '通用'}（已加载 ${skill.parts.join(' + ')}）`);
+    emit('info', `skill 适配: ${job.kernel_type_name || job.kernel_type} | triton ${sv.triton_major || '通用'} / SDK ${sv.sdk_minor || '通用'}（已加载 ${skill.parts.join(' + ')}）`);
     const messages = [
       { role: 'system', content: skill.prompt },
       { role: 'user', content: buildTaskPrompt(job) },

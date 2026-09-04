@@ -34,14 +34,19 @@ api.post('/jobs', async (req, res) => {
   if (!b.whl) {
     return res.status(400).json({ error: '缺少 whl（请选择 whl 包版本）' });
   }
+  const kernelType = b.kernel_type || 'mctriton';
+  const kt = (config.kernel_types || []).find((k) => k.id === kernelType);
+  if (!kt) {
+    return res.status(400).json({ error: `不支持的 kernel 类型: ${kernelType}` });
+  }
   // 解析该 whl 版本对应的 skill 版本（triton 大版本 + SDK 小版本）
-  let skillVersions = resolveSkillVersions(b.whl, null);
+  let skillVersions = resolveSkillVersions(b.whl, null, kernelType);
   try {
     const cat = await getCatalog();
     const entry = cat?.whls?.find((w) => w.id === b.whl);
-    if (entry) skillVersions = resolveSkillVersions(b.whl, entry);
+    if (entry) skillVersions = resolveSkillVersions(b.whl, entry, kernelType);
   } catch { /* 目录发现失败时用 manifest/目录名推断 */ }
-  const job = createJob({ ...b, skill_versions: skillVersions });
+  const job = createJob({ ...b, kernel_type: kernelType, kernel_type_name: kt.name, skill_versions: skillVersions });
   res.status(201).json({ job_id: job.id, status: job.status });
 });
 
@@ -52,8 +57,8 @@ api.get('/jobs', (_req, res) => {
 api.get('/jobs/:id', (req, res) => {
   const job = getJob(req.params.id);
   if (!job) return res.status(404).json({ error: '作业不存在' });
-  const { torch_code, ...rest } = job;
-  res.json({ ...rest, torch_code_len: torch_code.length });
+  // 详情接口返回完整信息（含用户输入的 torch_fn，供结果页展示）
+  res.json(job);
 });
 
 api.post('/jobs/:id/cancel', (req, res) => {

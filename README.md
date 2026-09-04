@@ -1,8 +1,8 @@
 # Poseidon 🔱
 
-基于沐曦（MetaX）GPU 的 **mcTriton kernel 自动生成与性能测试 Web 平台**。
+基于沐曦（MetaX）GPU 的 **DSL Kernel 自动生成与性能测试 Web 平台**（当前支持的输出 kernel 类型：mcTriton）。
 
-用户在 Web 页面输入一段 **torch 参考实现**，选择 MACA SDK 版本、whl 包版本与目标 GPU（如沐曦 C500），
+用户在 Web 页面输入一段 **torch 参考实现**，选择 **输出 kernel 类型**、MACA SDK 版本、whl 包版本与目标 GPU（如沐曦 C500），
 点击 **Run** 后，平台调用大模型（DeepSeek API，默认模型 `deepseek-v4-pro`）生成等价的 mcTriton kernel，
 在构建机上完成 **精度校验**（与 torch 实现逐元素对比）与 **性能测试**，并把结果（精度指标、延迟、加速比）与
 生成的 kernel 代码展示在页面上。精度不通过时平台会自动把错误反馈给模型进行修复重试。
@@ -88,7 +88,7 @@ npm start
 
 ### 4. 使用
 
-1. 左侧选择 **GPU 设备 / MACA SDK / whl 包 / 生成模型**，设置精度容差 rtol/atol 与最大修复轮次；
+1. 左侧选择 **输出 kernel 类型 / GPU 设备 / MACA SDK / whl 包 / 生成模型**，设置精度容差 rtol/atol 与最大修复轮次；
 2. 在 "torch 参考实现" 输入框粘贴代码（必须定义 `def torch_fn(*args, **kwargs)`），可选填"输入说明"；
 3. 点击 **▶ 生成并测试（Run）**；
 4. 右侧实时显示：LLM 生成 → 构建机编译运行日志 → 精度指标表 → torch vs triton 性能对比（加速比）→ 生成的 kernel 代码。

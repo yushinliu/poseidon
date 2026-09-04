@@ -18,7 +18,7 @@ app.get('/', (_req, res) => res.sendFile(path.join(WEB_DIR, 'index.html')));
 const { host, port } = config.server;
 app.listen(port, host, () => {
   console.log('='.repeat(60));
-  console.log('  🔱 Poseidon - 沐曦 mcTriton Kernel 自动生成平台');
+  console.log('  🔱 Poseidon - 沐曦 DSL Kernel 自动生成与性能测试平台');
   console.log(`  Web UI:   http://${host === '0.0.0.0' ? 'localhost' : host}:${port}`);
   console.log(`  构建机:   ${config.build_machine.host} (${config.build_machine.username})`);
   console.log(`  默认模型: ${config.llm.model}`);

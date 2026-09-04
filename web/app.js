@@ -32,6 +32,29 @@ const EXAMPLES = {
 `,
     hint: 'x: float32[4096, 512]，weight: float32[512]，bias: float32[512]',
   },
+  flashattn_fwd: {
+    code: `def torch_fn(q, k, v):
+    scale = q.shape[-1] ** -0.5
+    s = (q @ k.transpose(-2, -1)) * scale
+    p = torch.softmax(s, dim=-1)
+    return p @ v
+`,
+    hint: 'q: float32[2, 4, 512, 64]，k: float32[2, 4, 512, 64]，v: float32[2, 4, 512, 64]（未加因果掩码，head_dim=64）',
+  },
+  flashattn_bwd: {
+    code: `def torch_fn(q, k, v, do):
+    scale = q.shape[-1] ** -0.5
+    s = (q @ k.transpose(-2, -1)) * scale
+    p = torch.softmax(s, dim=-1)
+    dp = do @ v.transpose(-2, -1)
+    dv = p.transpose(-2, -1) @ do
+    ds = p * (dp - (dp * p).sum(dim=-1, keepdim=True))
+    dq = (ds * scale) @ k
+    dk = (ds * scale).transpose(-2, -1) @ q
+    return dq, dk, dv
+`,
+    hint: 'q/k/v: float32[2, 4, 512, 64]，do: float32[2, 4, 512, 64]（上游梯度；未加因果掩码，head_dim=64）',
+  },
 };
 
 let catalog = null;
@@ -78,12 +101,14 @@ function populateSelects() {
     }
   };
 
+  fill($('sel-ktype'), catalog.kernel_types || [{ id: 'mctriton', name: 'mcTriton' }]);
   fill($('sel-gpu'), catalog.devices);
   fill($('sel-sdk'), catalog.sdks, { valueKey: 'path', labelFn: (s) => `${s.path}（${s.version}）` });
   fill($('sel-whl'), catalog.whls, { labelFn: (w) => w.torch ? `${w.id}（${w.torch.replace('.whl', '').replace('torch-', 'torch ')} / ${w.triton.replace('.whl', '').replace('triton-', 'triton ')}）` : w.id });
   fill($('sel-model'), catalog.models, { labelFn: (m) => m });
 
   const prefs = JSON.parse(localStorage.getItem('poseidon-prefs') || '{}');
+  if (prefs.ktype && $('sel-ktype').querySelector(`option[value="${prefs.ktype}"]`)) $('sel-ktype').value = prefs.ktype;
   if (prefs.gpu && $('sel-gpu').querySelector(`option[value="${prefs.gpu}"]`)) $('sel-gpu').value = prefs.gpu;
   if (prefs.sdk && $('sel-sdk').querySelector(`option[value="${prefs.sdk}"]`)) $('sel-sdk').value = prefs.sdk;
   if (prefs.whl && $('sel-whl').querySelector(`option[value="${prefs.whl}"]`)) $('sel-whl').value = prefs.whl;
@@ -92,6 +117,7 @@ function populateSelects() {
 
 function savePrefs() {
   localStorage.setItem('poseidon-prefs', JSON.stringify({
+    ktype: $('sel-ktype').value,
     gpu: $('sel-gpu').value,
     sdk: $('sel-sdk').value,
     whl: $('sel-whl').value,
@@ -137,6 +163,7 @@ async function onRun() {
       body: JSON.stringify({
         torch_code: torchCode,
         inputs_hint: $('inputs-hint').value.trim(),
+        kernel_type: $('sel-ktype').value,
         gpu: $('sel-gpu').value,
         sdk: $('sel-sdk').value,
         whl: $('sel-whl').value,
@@ -247,6 +274,11 @@ function renderSuccess(job) {
     box.appendChild(d);
   }
 
+  // 展示用户输入的 torch_fn 参考实现
+  if (job.torch_code) {
+    addCodeBlock(box, '输入 torch_fn 参考实现', job.torch_code, true);
+  }
+
   if (r.performance) {
     const p = r.performance;
     const grid = document.createElement('div');
@@ -255,7 +287,7 @@ function renderSuccess(job) {
       <div class="result-box"><h3>torch 参考（中位数）</h3><div class="big-num">${p.torch_ms.toFixed(3)}<span class="unit">ms</span></div></div>
       <div class="result-box"><h3>mcTriton kernel（中位数）</h3><div class="big-num">${p.triton_ms.toFixed(3)}<span class="unit">ms</span></div></div>
       <div class="result-box"><h3>加速比</h3><div class="big-num">${p.speedup.toFixed(2)}<span class="unit">×</span></div></div>
-      <div class="result-box"><h3>测试参数</h3><div style="color:var(--dim)">warmup=${p.warmup} · iters=${p.iters} · ${job.gpu} / ${job.whl}</div></div>`;
+      <div class="result-box"><h3>测试参数</h3><div style="color:var(--dim)">warmup=${p.warmup} · iters=${p.iters} · ${escapeHtml(job.kernel_type_name || job.kernel_type || 'mcTriton')} / ${job.gpu} / ${job.whl}</div></div>`;
     box.appendChild(grid);
   }
 

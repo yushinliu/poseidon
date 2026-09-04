@@ -8,6 +8,10 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..');
 
 const DEFAULTS = {
   server: { host: '0.0.0.0', port: 8000 },
+  // 可输出的 kernel 类型（Web 运行配置下拉框；skill 字段对应 skills/ 目录名）
+  kernel_types: [
+    { id: 'mctriton', name: 'mcTriton', skill: 'mctriton-kernel-generation' },
+  ],
   llm: {
     base_url: 'https://api.deepseek.com',
     api_key: '',

@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>🔱 Poseidon · 沐曦 mcTriton Kernel 生成平台</title>
+<title>🔱 Poseidon · 沐曦 DSL Kernel 自动生成与性能测试平台</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header>
   <div class="logo">🔱 Poseidon</div>
-  <div class="subtitle">沐曦（MetaX）GPU · mcTriton Kernel 自动生成与性能测试平台</div>
+  <div class="subtitle">沐曦（MetaX）GPU · DSL Kernel 自动生成与性能测试平台</div>
   <div id="health" class="health">连接中…</div>
 </header>
 
@@ -18,6 +18,9 @@
     <div class="card">
       <h2>运行配置</h2>
       <div class="grid2">
+        <label>输出 kernel 类型
+          <select id="sel-ktype"></select>
+        </label>
         <label>GPU 设备
           <select id="sel-gpu"></select>
         </label>
@@ -56,6 +59,8 @@
           <option value="matmul">矩阵乘 (matmul)</option>
           <option value="gelu">GELU 激活</option>
           <option value="layernorm">LayerNorm</option>
+          <option value="flashattn_fwd">FlashAttention 前向 (flashattn_fwd)</option>
+          <option value="flashattn_bwd">FlashAttention 反向 (flashattn_bwd)</option>
         </select>
       </div>
       <textarea id="torch-code" spellcheck="false" placeholder="def torch_fn(x, y):&#10;    return x + y"></textarea>
