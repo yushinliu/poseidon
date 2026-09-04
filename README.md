@@ -18,7 +18,7 @@
 │  ① LLM 生成：system prompt = skills/mctriton-kernel-generation │
 │     （SKILL.md + references/），调用 DeepSeek API 输出 JSON    │
 │  ② 组装测试脚本：kernel + 输入构造 + 精度/性能 harness          │
-│  ③ SSH → 构建机（10.2.118.21），注入 MACA 环境变量运行          │
+│  ③ SSH → 构建机（地址在 config.yaml 配置），注入 MACA 环境变量运行     │
 │  ④ 解析结果；失败则把错误反馈给 LLM 自动修复（可配置轮次）       │
 └──────────────────────────────────────────────────────────────┘
         │
@@ -57,7 +57,7 @@ poseidon/
 ### 0. 前提
 
 - 本机（或部署机）安装 Node.js ≥ 20；
-- 能通过 SSH（密码）访问构建机 `10.2.118.21`（默认账号 `yuliu`）；
+- 能通过 SSH（密码）访问构建机（地址/账号在 `config.yaml` 中配置）；
 - 有可用的 DeepSeek API Key。
 
 ### 1. 安装依赖
@@ -97,10 +97,10 @@ npm start
 
 | 项目 | 值 |
 |---|---|
-| 主机 | `yuliu@10.2.118.21` |
+| 主机 | 由 `config.yaml` 的 `build_machine` 配置（示例见 `config.example.yaml`） |
 | GPU | MetaX C500（`mx-smi` 查看） |
-| SDK | `/opt/maca`（Version 20260318.1063，另有 `/opt/maca-3.7.0`） |
-| whl 包目录 | `~/ws/poseidon/whl/{3.7.1.3-dsv4, 3.7.2.0}/wheel`（torch/triton 等） |
+| SDK | `/opt/maca`（可在 Web 页面选择，另有独立版本目录如 `/opt/maca-<版本>`） |
+| whl 包目录 | `~/ws/poseidon/whl/{<版本>}/wheel`（torch/triton 等，Web 页面按版本选择） |
 | 运行环境变量 | `MACA_PATH=/opt/maca`，`LD_LIBRARY_PATH=/opt/maca/lib:/opt/maca/mxgpu_llvm/lib:/opt/maca/ompi/lib`，`TRITON_METAX_ENABLE_TORCH_REDUCTION_ORDER=1` |
 
 平台会自动为每个 whl 版本准备 Python 环境：优先使用 `build_machine.python_overrides` 中指定的解释器，

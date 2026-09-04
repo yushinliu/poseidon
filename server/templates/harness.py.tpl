@@ -7,7 +7,16 @@ import torch
 import triton
 import triton.language as tl
 
-DEVICE = triton.runtime.driver.active.get_active_torch_device()
+
+def _get_active_torch_device():
+    # triton 3.6（MetaX 移植版）提供该接口；3.0 无此接口（driver.active 为 LazyProxy），退回 torch 查询
+    try:
+        return triton.runtime.driver.active.get_active_torch_device()
+    except AttributeError:
+        return torch.device("cuda", torch.cuda.current_device())
+
+
+DEVICE = _get_active_torch_device()
 
 RTOL = float(os.environ.get("POSEIDON_RTOL", "0.02"))
 ATOL = float(os.environ.get("POSEIDON_ATOL", "0.02"))

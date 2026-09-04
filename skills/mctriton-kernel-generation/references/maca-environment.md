@@ -5,9 +5,8 @@
 
 ## 硬件
 
-- GPU：MetaX C500（1 卡），驱动 Kernel Mode Driver 3.9.0
-- 主机：x86_64 Linux（Ubuntu 22.04，内核 5.15）
-- 管理工具：`mx-smi`（类似 nvidia-smi）
+- GPU：MetaX C500（1 卡），管理工具 `mx-smi`（类似 nvidia-smi）
+- 主机：x86_64 Linux（Ubuntu 22.04 系）
 
 ## SDK（MACA）
 
@@ -35,9 +34,9 @@ export TRITON_METAX_ENABLE_TORCH_REDUCTION_ORDER=1
 | `3.7.1.3-dsv4` | 2.10.0+metax3.7.1.3.dsv4 | 3.6.0（MetaX fork） | 3.12 |
 | `3.7.2.0` | 2.8.0+metax3.7.2.0 | 3.0.0+metax3.7.2.0 | 3.12 |
 
-- 设备名：MetaX torch 将设备注册为 `cuda`（`triton.runtime.driver.active.get_active_torch_device()` → `cuda:0`）。
+- 设备名：MetaX torch 将设备注册为 `cuda`（triton 3.6 的 `get_active_torch_device()` 返回 `cuda:0`；3.0 无此接口，用 `torch.cuda.current_device()`）。
 - 显存同步：`torch.cuda.synchronize()` 有效。
-- 构建机自带 conda（miniforge3）环境 `yuliu`（Python 3.12.13，torch 2.10 + triton 3.6）。
+- 构建机自带 conda（miniforge3）Python 3.12 环境（torch + triton 已装好，供平台直接使用）。
 
 ## 约束（生成代码务必遵守）
 

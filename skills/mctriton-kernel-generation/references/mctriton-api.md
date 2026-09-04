@@ -12,7 +12,7 @@
 | `triton.Config(kwargs, num_warps=4, num_stages=2)` | 启动配置；MetaX 扩展 kwargs：`pipeline: "cpasync"`、`scenario: "storeCoalesce"` |
 | `triton.cdiv(a, b)` | 向上取整除 |
 | `triton.next_power_of_2(n)` | 下一个 2 的幂 |
-| `triton.runtime.driver.active.get_active_torch_device()` | 获取当前设备（MetaX 返回 `cuda:0`） |
+| `triton.runtime.driver.active.get_active_torch_device()` | 获取当前设备（返回 `cuda:0`）。**仅 triton 3.6 可用**；3.0 请用 `torch.device("cuda", torch.cuda.current_device())` |
 | `kernel[(grid,)](args...)` | 启动 kernel，grid 为 1~3 维 tuple |
 
 ## triton.language 核心

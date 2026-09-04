@@ -28,8 +28,10 @@
 
 ### 2.1 kernel_code 规则
 
-- **只包含**：`@triton.jit`（或 `@triton.autotune` + `@triton.jit`）修饰的内核函数，以及一个名为 `run_kernel(*args, **kwargs)` 的启动函数。
+- **单内核铁律**：一个 `torch_fn` 只允许对应 **一个** `@triton.jit` 内核。禁止生成多个 kernel、禁止 kernel 之间互相调用、禁止"部分计算用 triton kernel + 部分计算用 torch 函数"的混用方案。
+- **只包含**：一个 `@triton.jit`（可叠加 `@triton.autotune`）内核函数，以及一个名为 `run_kernel(*args, **kwargs)` 的启动函数。
 - `run_kernel` 接收 `make_inputs` 产生的输入（torch Tensor / int / float），内部计算 grid 并启动 kernel，**返回输出 Tensor（或 Tensor 元组）**，输出结构、shape、dtype 必须与 `torch_fn` 的返回值一致。
+- `run_kernel` 中**只允许**：张量分配（`torch.empty_like` / `torch.zeros`）、内存整理（`.contiguous()`）、纯 Python 标量运算、grid 计算与 kernel 启动、返回结果。**禁止**在 `run_kernel` 中调用任何 torch 计算函数（matmul/softmax/gelu/加减乘除等——全部计算必须发生在单个 kernel 内部）。
 - **禁止**出现在 kernel_code 中：`import` 语句、`make_inputs`、任何基准测试/计时/同步/打印代码、`if __name__` 块。
 - 平台负责注入 `import torch / triton / triton.language as tl` 与全部测试框架；你自己写的 `import` 会导致重复注入。
 - 传入 kernel 的 tensor 直接作为指针参数使用（Triton 会自动取 `data_ptr()`）；非 Tensor 参数（尺寸、stride、标量）按值传入。
@@ -57,7 +59,7 @@
 ### 3.1 环境事实（平台已注入，kernel 代码无需处理）
 
 - 运行时环境变量已设置：`MACA_PATH=/opt/maca`、`LD_LIBRARY_PATH=/opt/maca/lib:/opt/maca/mxgpu_llvm/lib:/opt/maca/ompi/lib`、`TRITON_CACHE_DIR=<作业目录>/cache`、`TRITON_METAX_ENABLE_TORCH_REDUCTION_ORDER=1`。
-- 设备名：MetaX 的 torch 将设备注册为 `cuda`（`triton.runtime.driver.active.get_active_torch_device()` 返回 `cuda:0`）。**不要在 kernel 代码里写 CUDA 专属的东西**。
+- 设备名：MetaX 的 torch 将设备注册为 `cuda`（triton 3.6 可用 `triton.runtime.driver.active.get_active_torch_device()`，3.0 无此接口）。**inputs_code 直接使用平台传入的 `device` 参数即可，无需自行探测。不要在 kernel 代码里写 CUDA 专属的东西**。
 - 可用的 Python 包：`torch`（MetaX 移植，2.8 或 2.10）、`triton`（MetaX 移植，3.0 或 3.6）、`triton.language as tl`、`numpy`。
 
 ### 3.2 内核定义
@@ -161,6 +163,8 @@ def softmax_kernel(x_ptr, y_ptr, n_rows, n_cols, BLOCK_COLS: tl.constexpr):
 
 常见失败原因自查：
 - `@triton.jit` 内使用了 Python 运行时不支持的结构（如 f-string、非 constexpr 的 list 推导、dict 遍历）——只用简单标量算术与 tl 算子；
+- 生成了多个 kernel 或 kernel+torch 混用——平台会拒绝，必须合并为**单个 kernel**；
+- 平台会按所选 whl 版本注入版本专属约束（如 triton 3.0 不支持 `input_precision`、3.6 无 `boundary_check`），请遵守；
 - block 尺寸不是 2 的幂；`tl.dot` 维度 < 16；
 - mask 缺失导致越界段错误（进程直接崩溃）；
 - 输出 tensor 未预分配或用 `torch.empty` 后未写满（应带 mask 写满或先 `torch.zeros`）；

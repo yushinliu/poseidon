@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { config } from '../config.js';
 import { getCatalog } from './catalog.js';
 import { createJob, getJob, listJobs, cancelJob } from '../jobs.js';
-import { loadSkillPrompt } from '../skills.js';
+import { loadSkillPrompt, resolveSkillVersions } from '../skills.js';
 
 export const api = Router();
 
@@ -14,7 +14,7 @@ api.get('/health', (_req, res) => {
     model: config.llm.model,
     llm_configured: Boolean(config.llm.api_key),
     build_machine: { host: config.build_machine.host, username: config.build_machine.username },
-    skill_chars: loadSkillPrompt().length,
+    skill_chars: loadSkillPrompt().prompt.length,
   });
 });
 
@@ -26,7 +26,7 @@ api.get('/catalog', async (_req, res) => {
   }
 });
 
-api.post('/jobs', (req, res) => {
+api.post('/jobs', async (req, res) => {
   const b = req.body || {};
   if (typeof b.torch_code !== 'string' || !b.torch_code.trim()) {
     return res.status(400).json({ error: '缺少 torch_code（torch 参考实现）' });
@@ -34,7 +34,14 @@ api.post('/jobs', (req, res) => {
   if (!b.whl) {
     return res.status(400).json({ error: '缺少 whl（请选择 whl 包版本）' });
   }
-  const job = createJob(b);
+  // 解析该 whl 版本对应的 skill 版本（triton 大版本 + SDK 小版本）
+  let skillVersions = resolveSkillVersions(b.whl, null);
+  try {
+    const cat = await getCatalog();
+    const entry = cat?.whls?.find((w) => w.id === b.whl);
+    if (entry) skillVersions = resolveSkillVersions(b.whl, entry);
+  } catch { /* 目录发现失败时用 manifest/目录名推断 */ }
+  const job = createJob({ ...b, skill_versions: skillVersions });
   res.status(201).json({ job_id: job.id, status: job.status });
 });
 

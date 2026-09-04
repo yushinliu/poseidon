@@ -25,7 +25,14 @@ import torch
 import triton  # noqa: F401  (供 exec 出的 kernel 代码使用)
 import triton.language as tl  # noqa: F401
 
-DEVICE = triton.runtime.driver.active.get_active_torch_device()
+def _get_active_torch_device():
+    try:
+        return triton.runtime.driver.active.get_active_torch_device()
+    except AttributeError:
+        return torch.device("cuda", torch.cuda.current_device())
+
+
+DEVICE = _get_active_torch_device()
 
 
 def _load_code(path):

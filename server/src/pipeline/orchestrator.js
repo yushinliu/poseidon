@@ -69,11 +69,14 @@ export async function runJob(job) {
     const workdir = jobRemoteDir(job.id);
     await ssh.exec(`mkdir -p '${workdir}'`);
 
-    const { python } = await ensurePython(ssh, job.whl, emit, isCancelled);
+    const { python } = await ensurePython(ssh, job.whl, emit, isCancelled, job.sdk);
     if (job.cancelled) { checkCancelled(); return; }
 
+    const skill = loadSkillPrompt(job.skill_versions);
+    const sv = job.skill_versions || {};
+    emit('info', `skill 版本适配: triton ${sv.triton_major || '通用'} / SDK ${sv.sdk_minor || '通用'}（已加载 ${skill.parts.join(' + ')}）`);
     const messages = [
-      { role: 'system', content: loadSkillPrompt() },
+      { role: 'system', content: skill.prompt },
       { role: 'user', content: buildTaskPrompt(job) },
     ];
 
@@ -92,7 +95,8 @@ export async function runJob(job) {
           const now = Date.now();
           if (now - lastProgress > 10000) {
             lastProgress = now;
-            emit('info', `LLM 生成中…（已输出 ${p.contentLen} 字符代码，推理 ${p.reasoningLen} 字符）`);
+            // 进度只输出到服务端后台日志，不进 UI 任务流（避免刷屏）
+            console.log(`[llm] ${job.id} ${job.model} 生成中… 内容 ${p.contentLen} 字符 / 推理 ${p.reasoningLen} 字符`);
           }
         },
       });

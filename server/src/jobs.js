@@ -24,6 +24,7 @@ export function createJob(input) {
     warmup: Number(input.warmup) || config.benchmark.warmup,
     iters: Number(input.iters) || config.benchmark.iters,
     maxRetries: Number.isFinite(Number(input.max_retries)) ? Math.min(Math.max(Number(input.max_retries), 0), 10) : config.llm.max_retries,
+    skill_versions: input.skill_versions || { triton_major: null, sdk_minor: null },
     events: [],
     attempts: [],
     result: null,

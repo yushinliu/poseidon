@@ -15,7 +15,7 @@ export function expandRemote(user, p) {
  * - 否则在 venvs_dir/<whl> 创建 venv 并安装该版本的 torch/triton wheel。
  * 返回 { python, kind: 'override'|'venv' }。
  */
-export async function ensurePython(ssh, whl, emit, isCancelled = () => false) {
+export async function ensurePython(ssh, whl, emit, isCancelled = () => false, sdkDir = null) {
   const cfg = config.build_machine;
   const user = cfg.username;
   const override = cfg.python_overrides?.[whl];
@@ -38,12 +38,15 @@ export async function ensurePython(ssh, whl, emit, isCancelled = () => false) {
   emit('phase', `首次使用 whl 版本 ${whl}：创建 venv 并安装 torch/triton（可能需要几分钟）...`);
   const basePython = expandRemote(user, cfg.base_python);
   const wheelDir = `${expandRemote(user, cfg.whl_dir)}/${whl}/wheel`;
-  const indexOpt = cfg.pip_index_url ? `--index-url ${shq(cfg.pip_index_url)} --trusted-host ${shq(new URL(cfg.pip_index_url).hostname)}` : '';
+  const sdk = sdkDir && sdkDir !== 'auto' ? sdkDir : (cfg.sdk_dirs?.[0] || '/opt/maca');
 
+  // venv 复用 base_python 所在环境的 site-packages（构建机通常无外网 pip 源），
+  // 依赖（numpy/sympy/jinja2/fsspec/filelock/typing_extensions 等）来自该系统环境；
+  // 本版本 torch/triton 用本地 wheel 离线安装（--no-index --no-deps），venv 内的包优先于系统包。
   const steps = [
-    `rm -rf ${shq(venvDir)} && ${shq(basePython)} -m venv ${shq(venvDir)}`,
-    `${shq(`${venvDir}/bin/pip`)} install --no-cache-dir ${indexOpt} numpy sympy networkx jinja2 fsspec filelock typing_extensions setuptools`,
-    `${shq(`${venvDir}/bin/pip`)} install --no-cache-dir --no-deps ${indexOpt} ${shq(wheelDir)}/torch-*.whl ${shq(wheelDir)}/triton-*.whl`,
+    `test -x ${shq(`${venvDir}/bin/python`)} || (rm -rf ${shq(venvDir)} && ${shq(basePython)} -m venv --system-site-packages ${shq(venvDir)})`,
+    `${shq(`${venvDir}/bin/pip`)} install --no-cache-dir --no-index --no-deps ${shq(wheelDir)}/torch-*.whl ${shq(wheelDir)}/triton-*.whl`,
+    `export MACA_PATH=${shq(sdk)}; export LD_LIBRARY_PATH=${shq(`${sdk}/lib:${sdk}/mxgpu_llvm/lib:${sdk}/ompi/lib`)}:$LD_LIBRARY_PATH; ${shq(`${venvDir}/bin/python`)} -c "import torch, triton; print('venv OK torch', torch.__version__, 'triton', triton.__version__)"`,
     `touch ${shq(marker)}`,
   ];
   for (const cmd of steps) {

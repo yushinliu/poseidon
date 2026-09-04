@@ -226,6 +226,8 @@ function renderJob(job) {
     line.innerHTML = `<span class="t">${time}</span><span class="${ev.type}">${escapeHtml(ev.message)}</span>`;
     log.appendChild(line);
   }
+  // 只保留最近 400 行，避免 DOM 过大导致卡顿/叠字
+  while (log.children.length > 400) log.removeChild(log.firstChild);
   if (newEvents.length) log.scrollTop = log.scrollHeight;
 
   if (job.status === 'success') renderSuccess(job);

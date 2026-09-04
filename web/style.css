@@ -153,12 +153,12 @@ button.cancel:hover { background: rgba(248, 81, 73, .12); }
   overflow-y: auto;
   font-family: var(--mono);
   font-size: 12px;
-  line-height: 1.55;
+  line-height: 1.65;
   white-space: pre-wrap;
   word-break: break-all;
 }
-.log .line { display: block; }
-.log .t { color: #484f58; margin-right: 6px; }
+.log .line { display: block; margin: 2px 0; }
+.log .t { color: #484f58; margin-right: 8px; }
 .log .info { color: var(--dim); }
 .log .phase { color: #79c0ff; font-weight: 700; }
 .log .llm { color: #d2a8ff; }
